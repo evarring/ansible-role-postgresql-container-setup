@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for postgresql_container_setup
+
+- name: Pull the configured images if they haven't already and stop containers if changed
+  notify: Stop containers
+  block:
+    - name: Pull the configured images if they haven't already
+      community.docker.docker_image:
+        name: "{{ postgresqlimage_item }}"
+        source: pull
+      loop:
+        - "{{ postgresql_container_setup_image }}"
+      loop_control:
+        loop_var: postgresqlimage_item
+      register: postgresql_image_pull_result
+
+    - name: Flush handlers immediately
+      ansible.builtin.meta: flush_handlers
+      when: postgresql_image_pull_result.changed # noqa: no-handler
+
+- name: Ensure postgresql container is stopped when recreating
+  when: postgresql_container_setup_recreate
+  block:
+    - name: Notify the handler
+      ansible.builtin.debug:
+        msg: "Stopping containers for recreation"
+      notify: Stop containers
+      changed_when: true
+
+    - name: Flush handlers immediately
+      ansible.builtin.meta: flush_handlers
+
+- name: Ensure postgresql container volume directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0744'
+    owner: "{{ ansible_user | default(root) }}"
+    group: "{{ ansible_user | default(root) }}"
+  loop:
+    - "{{ postgresql_container_setup_dir }}"
+    - "{{ postgresql_container_setup_backup_dir }}"
+  become: true
+
+- name: Create networks
+  community.docker.docker_network:
+    name: "{{ item.name }}"
+  loop: "{{ postgresql_container_setup_networks }}"
+  become: true
+
+- name: Create postgresql container
+  community.docker.docker_container:
+    name: "{{ postgresql_container_setup_name }}"
+    image: "{{ postgresql_container_setup_image }}"
+    state: "{{ postgresql_container_setup_state | default('started') }}"
+    network_mode: "{{ postgresql_container_setup_network_mode }}"
+    networks: "{{ postgresql_container_setup_networks }}"
+    cpus: "{{ postgresql_container_setup_cpus }}"
+    memory: "{{ postgresql_container_setup_memory }}"
+    healthcheck: "{{ postgresql_container_setup_healthcheck | default(omit) }}"
+    recreate: "{{ postgresql_container_setup_recreate }}"
+    privileged: "{{ postgresql_container_setup_privileged }}"
+    user: "{{ postgresql_container_setup_user_uid_gid | default(omit) }}"
+    ports: "{{ postgresql_container_setup_ports }}"
+    volumes:
+      - "{{ postgresql_container_setup_dir }}/:/var/lib/postgresql/:rw,Z" # https://github.com/docker-library/postgres/pull/1259
+      - "{{ postgresql_container_setup_backup_dir }}/:/postgresql_backup:rw,Z"
+    env: "{{ postgresql_container_setup_env | default(omit) }}"
+    labels: "{{ postgresql_container_setup_labels }}"
+    restart_policy: "{{ postgresql_container_setup_restart_policy }}"
+
+- name: Enable linger for user {{ ansible_user | default('root') }}
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/loginctl
+      - enable-linger
+      - "{{ ansible_user | default('root') }}"
+    creates: "/var/lib/systemd/linger/{{ ansible_user | default('root') }}"
+  become: true
+  when: ansible_virtualization_type != "container"

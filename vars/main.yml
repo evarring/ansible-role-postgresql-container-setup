@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for postgresql_container_setup
+
+postgresql_container_setup_network_mode: "{{ postgresql_container_setup_networks[0].name }}"

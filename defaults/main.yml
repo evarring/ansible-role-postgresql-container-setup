@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for postgresql_container_setup
+
+postgresql_container_setup_name: postgresql
+postgresql_container_setup_networks:
+  - name: postgresql
+
+postgresql_container_setup_image: docker.io/library/postgres:17.5-alpine3.22
+postgresql_container_setup_labels:
+  traefik.enable: "false"
+postgresql_container_setup_dir: /srv/postgresql
+postgresql_container_setup_backup_dir: /srv/postgresql_backup
+postgresql_container_setup_user_uid_gid: "1000:1000"
+
+postgresql_container_setup_ports:
+  - "5432:5432"
+
+postgresql_container_setup_env:
+  POSTGRES_PASSWORD: "examplepassword"
+  POSTGRES_USER: "postgres"
+  POSTGRES_DB: "postgres"
+  PGDATA: "/var/lib/postgresql/17/docker" # https://github.com/docker-library/postgres/pull/1259
+
+postgresql_container_setup_recreate: true
+postgresql_container_setup_privileged: false
+postgresql_container_setup_restart_policy: unless-stopped
+
+postgresql_container_setup_healthcheck:
+  test: ["CMD-SHELL", "pg_isready -d {{ postgresql_container_setup_env.POSTGRES_DB }} -U {{ postgresql_container_setup_env.POSTGRES_USER }}"]
+  start_period: "20s"
+  interval: "30s"
+  retries: "5"
+  timeout: "5s"
+
+postgresql_container_setup_cpus: 1
+postgresql_container_setup_memory: 512M
